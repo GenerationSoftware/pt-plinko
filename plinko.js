@@ -36,6 +36,43 @@ window.addEventListener("load", () => {
       acc: { x: 0, y: 100 },
     },
   }
+  let prizeRows = [
+    {
+      gaps: [
+        {
+          colSize: 3,
+          onPath: true,
+        },
+      ],
+    },
+    {
+      gaps: [
+        {
+          prize: {
+            value: 1,
+            tier: 5,
+          },
+          onPath: true,
+        },
+        {
+          prize: {
+            value: 1,
+            tier: 5,
+          },
+        },
+      ],
+    },
+    {
+      gaps: [
+        {
+          prize: {
+            value: 5000,
+            tier: 0,
+          },
+        },
+      ],
+    },
+  ]
 
   window.addEventListener("keydown", (e) => {
     if (e.key === " ") {
