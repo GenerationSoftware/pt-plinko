@@ -20,6 +20,8 @@ window.addEventListener("load", () => {
   const maxRotVel = 10
   const frameStepMs = 25 // 40 fps physics updates
   const collisionElasticity = 0.3
+  const prizeRowFrequency = 4
+  const prizeRowColPerSec = 1.5
   let lastFrameTime = 0
   let totalPlayTime = 0
   let gameState = {
@@ -45,7 +47,7 @@ window.addEventListener("load", () => {
   const ctx = canvas.getContext("2d")
 
   // Define render call
-  const render = (ballPos, ballRotation) => {
+  const render = (ballPos, ballRotation, gameMs) => {
     // Set camera position
     let gameYOffset = -marginTop - ballRadius
     if (ballPos.y >= rowHeight * 2) gameYOffset += ballPos.y - rowHeight * 2
@@ -89,12 +91,25 @@ window.addEventListener("load", () => {
       row <= topPegRow + Math.ceil(gameHeight / rowHeight);
       row++
     ) {
-      for (let col = 0; col < columns + 1; col++) {
+      let colOffset = 0
+      ctx.fillStyle = plinko.computedStyleMap().get("--peg-color")[0]
+      if ((row + 1) % prizeRowFrequency == 0) {
+        const prizeRowIndex = (row + 1) / prizeRowFrequency - 1
+        const prizeRow = prizeRows[prizeRowIndex]
+
+        // set col offset
+        colOffset =
+          ((prizeRowColPerSec * columnWidth * gameMs) / 1000) % columnWidth
+        if (prizeRowIndex % 2 == 0) colOffset *= -1
+
+        // set peg fill style
+        ctx.fillStyle = plinko.computedStyleMap().get("--ball-color")[0]
+      }
+      for (let col = -1; col < columns + 2; col++) {
         const oddRow = row % 2 != 0
-        ctx.fillStyle = plinko.computedStyleMap().get("--peg-color")[0]
         ctx.beginPath()
         ctx.ellipse(
-          (oddRow ? col : col + 0.5) * columnWidth,
+          (oddRow ? col : col + 0.5) * columnWidth + colOffset,
           row * rowHeight - gameYOffset,
           pegRadius,
           pegRadius,
@@ -122,7 +137,7 @@ window.addEventListener("load", () => {
     )
 
     // re-render frame
-    render(gameState.ball.pos)
+    render(gameState.ball.pos, gameState.ball.rot, totalPlayTime)
   }
   window.addEventListener("resize", resize)
 
@@ -187,7 +202,23 @@ window.addEventListener("load", () => {
     // Check for peg collisions
     const nearestPegRow = Math.round(n.ball.pos.y / rowHeight)
     if (nearestPegRow > 0) {
-      const colOffset = nearestPegRow % 2 == 0 ? columnWidth / 2 : 0
+      let colOffset,
+        pegVelocity = { x: 0, y: 0 }
+
+      // Check if prize row is closest
+      if ((nearestPegRow + 1) % prizeRowFrequency == 0) {
+        const prizeRowIndex = (nearestPegRow + 1) / prizeRowFrequency - 1
+
+        // set col offset
+        pegVelocity = {
+          x:
+            prizeRowColPerSec * columnWidth * (prizeRowIndex % 2 == 0 ? -1 : 1),
+          y: 0,
+        }
+        colOffset = ((pegVelocity.x * n.ms) / 1000) % columnWidth
+      } else {
+        colOffset = nearestPegRow % 2 == 0 ? columnWidth / 2 : 0
+      }
       const nearestPegCol = Math.round((n.ball.pos.x - colOffset) / columnWidth)
       const pegPos = {
         x: nearestPegCol * columnWidth + colOffset,
@@ -196,7 +227,7 @@ window.addEventListener("load", () => {
       if (dist(n.ball.pos, pegPos) < ballRadius + pegRadius) {
         // Bounce
         const diff = { x: pegPos.x - n.ball.pos.x, y: pegPos.y - n.ball.pos.y }
-        const angleOfHit = angleBetween(pegPos, n.ball.pos)
+        const angleOfHit = angleBetween(diff, n.ball.vel)
         if (angleOfHit < Math.PI / 2) {
           const perpendicularVel = project(n.ball.vel, diff)
           const parallelVel = sub(n.ball.vel, perpendicularVel)
@@ -204,6 +235,18 @@ window.addEventListener("load", () => {
             parallelVel,
             smul(perpendicularVel, -collisionElasticity)
           )
+
+          // Check if peg transfers velocity to ball
+          if (pegVelocity.x != 0) {
+            const negDiff = neg(diff)
+            const angleOfTransfer = angleBetween(pegVelocity, negDiff)
+            if (angleOfTransfer < Math.PI / 2) {
+              n.ball.vel = add(
+                n.ball.vel,
+                smul(pegVelocity, Math.cos(angleOfTransfer))
+              )
+            }
+          }
 
           // Spin ball based on collision
           n.ball.rotVel *= 0.5
@@ -251,7 +294,7 @@ window.addEventListener("load", () => {
         smul(gameState.ball.pos, 1 - t),
         smul(nextState.ball.pos, t)
       )
-      render(iBallPos, gameState.ball.rot)
+      render(iBallPos, gameState.ball.rot, totalPlayTime)
     }
   }
 
