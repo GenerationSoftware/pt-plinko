@@ -23,7 +23,7 @@ window.addEventListener("load", () => {
   let lastFrameTime = 0
   let totalPlayTime = 0
   let gameState = {
-    state: "ready", // ready / playing / done
+    state: "ready", // ready / playing / done / paused
     frame: 0,
     ms: 0,
     ball: {
@@ -125,6 +125,20 @@ window.addEventListener("load", () => {
     render(gameState.ball.pos)
   }
   window.addEventListener("resize", resize)
+
+  // Listen for focus and blur events
+  window.addEventListener("blur", () => {
+    if (gameState.state === "playing") {
+      gameState.state = "paused"
+    }
+  })
+  window.addEventListener("focus", () => {
+    if (gameState.state === "paused") {
+      gameState.state = "playing"
+      lastFrameTime = performance.now()
+      play()
+    }
+  })
 
   // Function to get the game state for the next frame
   const getNextFrameState = (state) => {
