@@ -74,12 +74,6 @@ window.addEventListener("load", () => {
     },
   ]
 
-  window.addEventListener("keydown", (e) => {
-    if (e.key === " ") {
-      gameState.state = "done"
-    }
-  })
-
   // Create 2D context
   const ctx = canvas.getContext("2d")
 
@@ -177,20 +171,6 @@ window.addEventListener("load", () => {
     render(gameState.ball.pos, gameState.ball.rot, totalPlayTime)
   }
   window.addEventListener("resize", resize)
-
-  // Listen for focus and blur events
-  window.addEventListener("blur", () => {
-    if (gameState.state === "playing") {
-      gameState.state = "paused"
-    }
-  })
-  window.addEventListener("focus", () => {
-    if (gameState.state === "paused") {
-      gameState.state = "playing"
-      lastFrameTime = performance.now()
-      play()
-    }
-  })
 
   // Function to get the game state for the next frame
   const getNextFrameState = (state) => {
@@ -317,7 +297,8 @@ window.addEventListener("load", () => {
       // Request next frame
       requestAnimationFrame(play)
       const now = performance.now()
-      totalPlayTime += now - lastFrameTime
+      const timeSinceLastFrame = Math.min(frameStepMs, now - lastFrameTime) // limit animation frame time to frame step
+      totalPlayTime += timeSinceLastFrame
       lastFrameTime = now
 
       const nextState = getNextFrameState(gameState)
