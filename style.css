@@ -52,6 +52,8 @@ html, body {
   border-radius: 50%;
   width: var(--start-btn-size);
   height: var(--start-btn-size);
+  font-weight: bold;
+  margin-top: 1rem;
 }
 
 #plinko > .ui .start-btn-container {
