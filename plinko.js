@@ -4,16 +4,22 @@ window.addEventListener("load", () => {
   const canvas = plinko.querySelector("canvas")
   const startButtons = [...plinko.querySelectorAll(".start-btn")]
 
+  // Assets
+  const poolLogoSvg = document.createElement("img")
+  poolLogoSvg.src = "./img/pool-logo.svg"
+
   // Define game state
   const gameWidth = 100
   const columns = startButtons.length
   const columnWidth = gameWidth / columns
+  const rowHeight = columnWidth * 0.75
   const ballRadius = columnWidth / 5
   const pegRadius = columnWidth * 0.1
   const marginTop = ballRadius
-  const maxSpeed = 100
+  const maxSpeed = 90
+  const maxRotVel = 10
   const frameStepMs = 25 // 40 fps physics updates
-  const collisionElasticity = 0.5
+  const collisionElasticity = 0.3
   let lastFrameTime = 0
   let totalPlayTime = 0
   let gameState = {
@@ -22,8 +28,10 @@ window.addEventListener("load", () => {
     ms: 0,
     ball: {
       pos: { x: -2 * ballRadius, y: 0 },
+      rot: 0,
+      rotVel: 0,
       vel: { x: 0, y: 0 },
-      acc: { x: 0, y: 50 },
+      acc: { x: 0, y: 100 },
     },
   }
 
@@ -37,10 +45,10 @@ window.addEventListener("load", () => {
   const ctx = canvas.getContext("2d")
 
   // Define render call
-  const render = (ballPos) => {
+  const render = (ballPos, ballRotation) => {
     // Set camera position
     let gameYOffset = -marginTop - ballRadius
-    if (ballPos.y >= columnWidth * 2) gameYOffset += ballPos.y - columnWidth * 2
+    if (ballPos.y >= rowHeight * 2) gameYOffset += ballPos.y - rowHeight * 2
 
     // clear and scale
     const scale = gameWidth / canvas.width
@@ -51,19 +59,43 @@ window.addEventListener("load", () => {
     // render ball
     ctx.fillStyle = plinko.computedStyleMap().get("--ball-color")[0]
     ctx.beginPath()
-    ctx.ellipse(ballPos.x, ballPos.y - gameYOffset, ballRadius, ballRadius, 0, 0, Math.PI * 2)
+    ctx.ellipse(
+      ballPos.x,
+      ballPos.y - gameYOffset,
+      ballRadius,
+      ballRadius,
+      0,
+      0,
+      Math.PI * 2
+    )
     ctx.fill()
+    ctx.save()
+    ctx.translate(ballPos.x, ballPos.y - gameYOffset)
+    ctx.rotate(ballRotation)
+    ctx.translate(-ballPos.x, gameYOffset - ballPos.y)
+    ctx.drawImage(
+      poolLogoSvg,
+      ballPos.x - ballRadius * 0.66,
+      ballPos.y - gameYOffset - ballRadius * 0.66,
+      ballRadius * 1.32,
+      ballRadius * 1.32
+    )
+    ctx.restore()
 
     // render pegs
-    const topPegRow = Math.max(1, Math.floor(gameYOffset / columnWidth))
-    for (let row = topPegRow; row <= topPegRow + Math.ceil(gameHeight / columnWidth); row++) {
+    const topPegRow = Math.max(1, Math.floor(gameYOffset / rowHeight))
+    for (
+      let row = topPegRow;
+      row <= topPegRow + Math.ceil(gameHeight / rowHeight);
+      row++
+    ) {
       for (let col = 0; col < columns + 1; col++) {
         const oddRow = row % 2 != 0
         ctx.fillStyle = plinko.computedStyleMap().get("--peg-color")[0]
         ctx.beginPath()
         ctx.ellipse(
           (oddRow ? col : col + 0.5) * columnWidth,
-          row * columnWidth - gameYOffset,
+          row * rowHeight - gameYOffset,
           pegRadius,
           pegRadius,
           0,
@@ -84,7 +116,10 @@ window.addEventListener("load", () => {
     canvas.width = bb.width
     canvas.height = bb.height
 
-    plinko.style.setProperty("--start-btn-size", `${(0.8 * bb.width) / columns}px`)
+    plinko.style.setProperty(
+      "--start-btn-size",
+      `${(0.8 * bb.width) / columns}px`
+    )
 
     // re-render frame
     render(gameState.ball.pos)
@@ -97,18 +132,25 @@ window.addEventListener("load", () => {
     n.frame++
     n.ms = state.ms + frameStepMs
 
-    // Move ball
+    // Update velocity
     n.ball.vel.x += (n.ball.acc.x * frameStepMs) / 1000
     n.ball.vel.y += (n.ball.acc.y * frameStepMs) / 1000
-    n.ball.pos.x += (n.ball.vel.x * frameStepMs) / 1000
-    n.ball.pos.y += (n.ball.vel.y * frameStepMs) / 1000
 
     // Cap speed
-    const speed = Math.sqrt(n.ball.vel.x * n.ball.vel.x + n.ball.vel.y * n.ball.vel.y)
+    const speed = Math.sqrt(
+      n.ball.vel.x * n.ball.vel.x + n.ball.vel.y * n.ball.vel.y
+    )
     if (speed > maxSpeed) {
       n.ball.vel.x = (maxSpeed * n.ball.vel.x) / speed
       n.ball.vel.y = (maxSpeed * n.ball.vel.y) / speed
     }
+
+    // Move ball
+    n.ball.pos.x += (n.ball.vel.x * frameStepMs) / 1000
+    n.ball.pos.y += (n.ball.vel.y * frameStepMs) / 1000
+
+    // Rotate ball
+    n.ball.rot += (n.ball.rotVel * frameStepMs) / 1000
 
     // Check for wall collisions
     if (n.ball.pos.x < ballRadius) {
@@ -117,6 +159,7 @@ window.addEventListener("load", () => {
         n.ball.vel.x *= -1
       }
       n.ball.vel.x *= collisionElasticity
+      n.ball.rotVel += 2
     }
     if (n.ball.pos.x > gameWidth - ballRadius) {
       n.ball.pos.x = gameWidth - ballRadius
@@ -124,16 +167,17 @@ window.addEventListener("load", () => {
         n.ball.vel.x *= -1
       }
       n.ball.vel.x *= collisionElasticity
+      n.ball.rotVel -= 2
     }
 
     // Check for peg collisions
-    const nearestPegRow = Math.round(n.ball.pos.y / columnWidth)
+    const nearestPegRow = Math.round(n.ball.pos.y / rowHeight)
     if (nearestPegRow > 0) {
       const colOffset = nearestPegRow % 2 == 0 ? columnWidth / 2 : 0
       const nearestPegCol = Math.round((n.ball.pos.x - colOffset) / columnWidth)
       const pegPos = {
         x: nearestPegCol * columnWidth + colOffset,
-        y: nearestPegRow * columnWidth,
+        y: nearestPegRow * rowHeight,
       }
       if (dist(n.ball.pos, pegPos) < ballRadius + pegRadius) {
         // Bounce
@@ -142,13 +186,32 @@ window.addEventListener("load", () => {
         if (angleOfHit < Math.PI / 2) {
           const perpendicularVel = project(n.ball.vel, diff)
           const parallelVel = sub(n.ball.vel, perpendicularVel)
-          n.ball.vel = add(parallelVel, smul(perpendicularVel, -collisionElasticity))
+          n.ball.vel = add(
+            parallelVel,
+            smul(perpendicularVel, -collisionElasticity)
+          )
+
+          // Spin ball based on collision
+          n.ball.rotVel *= 0.5
+          n.ball.rotVel +=
+            0.25 *
+            mag(parallelVel) *
+            (parallelVel.y > 0 ? -1 : 1) *
+            (n.ball.vel.x > 0 ? -1 : 1)
         }
 
         // Push ball away
         const pushedDiff = smul(norm(diff), -1 * (ballRadius + pegRadius))
         n.ball.pos = add(pegPos, pushedDiff)
       }
+    }
+
+    // Cap ball rotational velocity
+    if (n.ball.rotVel > maxRotVel) {
+      n.ball.rotVel = maxRotVel
+    }
+    if (n.ball.rotVel < -maxRotVel) {
+      n.ball.rotVel = -maxRotVel
     }
 
     return n
@@ -170,8 +233,11 @@ window.addEventListener("load", () => {
 
       // Render frame with interpolated ball position
       const t = Math.min(1, (totalPlayTime - gameState.ms) / frameStepMs)
-      const iBallPos = add(smul(gameState.ball.pos, 1 - t), smul(nextState.ball.pos, t))
-      render(iBallPos)
+      const iBallPos = add(
+        smul(gameState.ball.pos, 1 - t),
+        smul(nextState.ball.pos, t)
+      )
+      render(iBallPos, gameState.ball.rot)
     }
   }
 
@@ -182,7 +248,8 @@ window.addEventListener("load", () => {
       gameState.state = "playing"
       lastFrameTime = performance.now()
       plinko.classList.add("playing")
-      gameState.ball.pos.x = (gameWidth * (position + 0.4 + 0.2 * Math.random())) / columns
+      gameState.ball.pos.x =
+        (gameWidth * (position + 0.4 + 0.2 * Math.random())) / columns
       play()
     })
   }
