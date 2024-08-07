@@ -13,6 +13,14 @@ html, body {
   height: 100%;
 }
 
+body {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  background-color: #eee;
+}
+
 #plinko {
   /* Game Style (can be overridden through query params) */
   --background-color: white;
@@ -38,6 +46,7 @@ html, body {
   height: 100%;
   min-width: 300px;
   min-height: 300px;
+  max-width: 100vmin;
   overflow: hidden;
   background-color: var(--background-color);
 }
