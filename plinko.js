@@ -23,6 +23,8 @@ window.addEventListener("load", () => {
   const prizeRowFrequency = 4
   const prizeRowColPerSec = 1.5
   const spikesPerCol = 7
+  let gameHeight = 100
+  let scale = 1
   let lastFrameTime = 0
   let totalPlayTime = 0
   let gameState = {
@@ -30,20 +32,18 @@ window.addEventListener("load", () => {
     frame: 0,
     ms: 0,
     ball: {
-      pos: { x: -2 * ballRadius, y: 0 },
+      pos: { x: -2 * ballRadius, y: -rowHeight },
       rot: 0,
       rotVel: 0,
       vel: { x: 0, y: 0 },
       acc: { x: 0, y: 100 },
     },
+    nextPrizeRow: 0,
   }
+  let futureGameState = null
   let prizeSizes = [100000, 10000, 5000, 100, 10, 1, 0, 0]
-  let prizeRows = [
-    [" ", "^", "^", "^", " ", "^", "^"],
-    ["^", "^", "^", 5, "^", 5, "^"],
-    ["^", "^", "^", 0, "^", "^", "^"],
-  ]
-  let prizeRowPath = [0, 3, 3]
+  let prizeRows = [[0, "^", "^", "^", "^", "^", "^"]]
+  let prizeRowPathOffset = []
 
   // Create 2D context
   const ctx = canvas.getContext("2d")
@@ -51,17 +51,15 @@ window.addEventListener("load", () => {
   // Define render call
   const render = (ballPos, ballRotation, gameMs) => {
     // Set camera position
-    let gameYOffset = -marginTop - ballRadius
+    let gameYOffset = -rowHeight - marginTop - ballRadius
     if (ballPos.y >= rowHeight * 2) gameYOffset += ballPos.y - rowHeight * 2
 
     // clear and scale
-    const scale = gameWidth / canvas.width
-    const gameHeight = scale * canvas.height
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     ctx.scale(1 / scale, 1 / scale)
 
     // render pegs
-    const topPegRow = Math.max(1, Math.floor(gameYOffset / rowHeight))
+    const topPegRow = Math.max(0, Math.floor(gameYOffset / rowHeight))
     for (
       let row = topPegRow;
       row <= topPegRow + Math.ceil(gameHeight / rowHeight);
@@ -71,9 +69,9 @@ window.addEventListener("load", () => {
       for (let col = -1; col < columns + 2; col++) {
         let colOffset = 0
 
-        // Draw Spikes and Prizes
-        if ((row + 1) % prizeRowFrequency == 0) {
-          const prizeRowIndex = (row + 1) / prizeRowFrequency - 1
+        // Prize Row Rendering
+        if (row > 0 && row % prizeRowFrequency == 0) {
+          const prizeRowIndex = row / prizeRowFrequency - 1
           const prizeRow = prizeRows[prizeRowIndex]
           const prizeColOffset = (prizeRowColPerSec * gameMs) / 1000
           const prizeColDir = prizeRowIndex % 2 == 0 ? -1 : 1
@@ -83,6 +81,9 @@ window.addEventListener("load", () => {
           } else {
             prizeIndex = Math.floor(col + prizeColOffset + columns) % columns
           }
+          if (prizeIndex < 0) prizeIndex += columns
+          prizeIndex =
+            (prizeIndex + prizeRowPathOffset[prizeRowIndex] ?? 0) % columns
 
           // set col offset
           colOffset =
@@ -116,7 +117,9 @@ window.addEventListener("load", () => {
               ctx.fillStyle = plinko
                 .computedStyleMap()
                 .get(`--prize-${tier}-color`)[0]
-              ctx.strokeStyle = plinko.computedStyleMap().get("--peg-color")[0]
+              ctx.strokeStyle = `hsla(${
+                Math.floor((360 * gameMs) / 1000) % 360
+              }, 100%, 50%, 0.6)`
               ctx.lineWidth = 0.5
               ctx.setLineDash([1, 1])
               ctx.lineDashOffset = gameMs / 500
@@ -162,10 +165,10 @@ window.addEventListener("load", () => {
 
         // Draw pegs
         ctx.fillStyle = plinko.computedStyleMap().get("--peg-color")[0]
-        const oddRow = row % 2 != 0
+        const evenRow = row % 2 == 0
         ctx.beginPath()
         ctx.ellipse(
-          (oddRow ? col : col + 0.5) * columnWidth + colOffset,
+          (evenRow ? col : col + 0.5) * columnWidth + colOffset,
           rowY,
           pegRadius,
           pegRadius,
@@ -212,6 +215,9 @@ window.addEventListener("load", () => {
     const bb = plinko.getBoundingClientRect()
     canvas.width = bb.width
     canvas.height = bb.height
+
+    scale = gameWidth / canvas.width
+    gameHeight = scale * canvas.height
 
     plinko.style.setProperty(
       "--start-btn-size",
@@ -274,8 +280,8 @@ window.addEventListener("load", () => {
         pegVelocity = { x: 0, y: 0 }
 
       // Check if prize row is closest
-      if ((nearestPegRow + 1) % prizeRowFrequency == 0) {
-        const prizeRowIndex = (nearestPegRow + 1) / prizeRowFrequency - 1
+      if (nearestPegRow > 0 && nearestPegRow % prizeRowFrequency == 0) {
+        const prizeRowIndex = nearestPegRow / prizeRowFrequency - 1
 
         // set col offset
         pegVelocity = {
@@ -285,7 +291,7 @@ window.addEventListener("load", () => {
         }
         colOffset = ((pegVelocity.x * n.ms) / 1000) % columnWidth
       } else {
-        colOffset = nearestPegRow % 2 == 0 ? columnWidth / 2 : 0
+        colOffset = nearestPegRow % 2 == 0 ? 0 : columnWidth / 2
       }
       const nearestPegCol = Math.round((n.ball.pos.x - colOffset) / columnWidth)
       const pegPos = {
@@ -339,6 +345,11 @@ window.addEventListener("load", () => {
       n.ball.rotVel = -maxRotVel
     }
 
+    // Check if ball has passed the next prize row
+    if (n.ball.pos.y >= (n.nextPrizeRow + 1) * rowHeight * prizeRowFrequency) {
+      n.nextPrizeRow++
+    }
+
     return n
   }
 
@@ -352,9 +363,42 @@ window.addEventListener("load", () => {
       totalPlayTime += timeSinceLastFrame
       lastFrameTime = now
 
+      // Get next game state
       const nextState = getNextFrameState(gameState)
       if (totalPlayTime >= nextState.ms) {
         gameState = nextState
+      }
+
+      // Simulate future game states until out of frame
+      if (futureGameState === null) futureGameState = nextState
+      while (
+        futureGameState.ball.pos.y <
+        nextState.ball.pos.y + gameHeight * 1.5
+      ) {
+        const nextPrizeRow = futureGameState.nextPrizeRow
+        futureGameState = getNextFrameState(futureGameState)
+        if (futureGameState.nextPrizeRow > nextPrizeRow) {
+          // record prize offset
+          let goalPegX =
+            ((prizeRowColPerSec *
+              columnWidth *
+              (nextPrizeRow % 2 == 0 ? -1 : 1) *
+              futureGameState.ms) /
+              1000) %
+            gameWidth
+          if (goalPegX < 0) {
+            goalPegX += gameWidth
+          }
+          prizeRowPathOffset[nextPrizeRow] =
+            Math.floor((futureGameState.ball.pos.x - goalPegX) / columnWidth) %
+            columns
+          if (prizeRowPathOffset[nextPrizeRow] < 0) {
+            prizeRowPathOffset[nextPrizeRow] += columns
+          }
+          prizeRowPathOffset[nextPrizeRow] =
+            (columns - prizeRowPathOffset[nextPrizeRow]) % columns
+          prizeRows.push(prizeRows[0])
+        }
       }
 
       // Render frame with interpolated ball position
