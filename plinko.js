@@ -20,7 +20,7 @@ window.addEventListener("load", () => {
   const maxRotVel = 10
   const frameStepMs = 25 // 40 fps physics updates
   const collisionElasticity = 0.3
-  const prizeRowFrequency = 4
+  const prizeRowFrequency = 8
   const prizeRowColPerSec = 1.5
   const spikesPerCol = 7
   let gameHeight = 100
@@ -66,117 +66,123 @@ window.addEventListener("load", () => {
       row++
     ) {
       const rowY = row * rowHeight - gameYOffset
-      for (let col = -1; col < columns + 2; col++) {
-        let colOffset = 0
 
-        // Prize Row Rendering
-        if (row > 0 && row % prizeRowFrequency == 0) {
-          const prizeRowIndex = row / prizeRowFrequency - 1
-          const prizeRow = prizeRows[prizeRowIndex]
-          const prizeColOffset = (prizeRowColPerSec * gameMs) / 1000
+      // Check if Prize Row
+      const isPrizeRow = row > 0 && row % prizeRowFrequency == 0
+      if (isPrizeRow) {
+        const prizeRowIndex = row / prizeRowFrequency - 1
+        const prizeRow = prizeRows[prizeRowIndex]
+        if (prizeRow) {
           const prizeColDir = prizeRowIndex % 2 == 0 ? -1 : 1
-          let prizeIndex
-          if (prizeColDir > 0) {
-            prizeIndex = Math.ceil(col - prizeColOffset + columns) % columns
-          } else {
-            prizeIndex = Math.floor(col + prizeColOffset + columns) % columns
-          }
-          if (prizeIndex < 0) prizeIndex += columns
-          prizeIndex =
-            (prizeIndex + prizeRowPathOffset[prizeRowIndex] ?? 0) % columns
+          const prizeRowOffset =
+            ((prizeColDir * columnWidth * (prizeRowColPerSec * gameMs)) /
+              1000) %
+            gameWidth
+          for (let i = 0; i < columns * 2; i++) {
+            const prizeIndex = (i + prizeRowPathOffset[prizeRowIndex]) % columns
+            const pegX =
+              i * columnWidth +
+              prizeRowOffset -
+              (prizeColDir > 0 ? gameWidth : 0) // start behind by 1 row if moving forward
+            if (pegX + columnWidth > 0 && pegX - columnWidth < gameWidth) {
+              if (prizeRow[prizeIndex] === "^") {
+                // Draw spikes
+                ctx.fillStyle = plinko
+                  .computedStyleMap()
+                  .get("--spike-color")[0]
+                ctx.beginPath()
+                ctx.moveTo(pegX, rowY + pegRadius)
+                ctx.lineTo(pegX + pegRadius, rowY)
+                for (let s = 1; s <= spikesPerCol * 2; s++) {
+                  ctx.lineTo(
+                    pegX +
+                      pegRadius +
+                      (s * (columnWidth - pegRadius * 2)) / (spikesPerCol * 2),
+                    s % 2 == 0 ? rowY : rowY - pegRadius
+                  )
+                }
+                ctx.lineTo(pegX + columnWidth, rowY + pegRadius)
+                ctx.fill()
+              } else if (Number.isInteger(prizeRow[prizeIndex])) {
+                // Draw Prize
+                const tier = prizeRow[prizeIndex]
+                const prizeRadius =
+                  pegRadius +
+                  ((ballRadius - pegRadius) * (prizeSizes.length - tier)) /
+                    prizeSizes.length
+                ctx.fillStyle = plinko
+                  .computedStyleMap()
+                  .get(`--prize-${tier}-color`)[0]
+                ctx.strokeStyle = `hsla(${
+                  Math.floor((360 * gameMs) / 1000) % 360
+                }, 100%, 50%, 0.6)`
+                ctx.lineWidth = 0.5
+                ctx.setLineDash([1, 1])
+                ctx.lineDashOffset = gameMs / 500
 
-          // set col offset
-          colOffset =
-            (prizeColDir * (prizeColOffset * columnWidth)) % columnWidth
-
-          if (prizeRow) {
-            const pegX = col * columnWidth + colOffset
-            if (prizeRow[prizeIndex] === "^") {
-              // Draw spikes
-              ctx.fillStyle = plinko.computedStyleMap().get("--spike-color")[0]
-              ctx.beginPath()
-              ctx.moveTo(pegX, rowY + pegRadius)
-              ctx.lineTo(pegX + pegRadius, rowY)
-              for (let i = 1; i <= spikesPerCol * 2; i++) {
-                ctx.lineTo(
-                  pegX +
-                    pegRadius +
-                    (i * (columnWidth - pegRadius * 2)) / (spikesPerCol * 2),
-                  i % 2 == 0 ? rowY : rowY - pegRadius
+                ctx.beginPath()
+                ctx.ellipse(
+                  pegX + columnWidth / 2,
+                  rowY,
+                  (columnWidth - pegRadius * 3) / 2,
+                  pegRadius / 2,
+                  0,
+                  Math.PI,
+                  Math.PI * 2
                 )
+                ctx.stroke()
+
+                ctx.beginPath()
+                ctx.ellipse(
+                  pegX + columnWidth / 2,
+                  rowY + prizeRadius / 2,
+                  prizeRadius,
+                  prizeRadius,
+                  0,
+                  0,
+                  Math.PI * 2
+                )
+                ctx.fill()
+
+                ctx.beginPath()
+                ctx.ellipse(
+                  pegX + columnWidth / 2,
+                  rowY,
+                  (columnWidth - pegRadius * 3) / 2,
+                  pegRadius / 2,
+                  0,
+                  0,
+                  Math.PI
+                )
+                ctx.stroke()
               }
-              ctx.lineTo(pegX + columnWidth, rowY + pegRadius)
+
+              // Draw peg
+              ctx.fillStyle = plinko.computedStyleMap().get("--peg-color")[0]
+              ctx.beginPath()
+              ctx.ellipse(pegX, rowY, pegRadius, pegRadius, 0, 0, Math.PI * 2)
               ctx.fill()
-            } else if (Number.isInteger(prizeRow[prizeIndex])) {
-              // Draw Prize
-              const tier = prizeRow[prizeIndex]
-              const prizeRadius =
-                pegRadius +
-                ((ballRadius - pegRadius) * (prizeSizes.length - tier)) /
-                  prizeSizes.length
-              ctx.fillStyle = plinko
-                .computedStyleMap()
-                .get(`--prize-${tier}-color`)[0]
-              ctx.strokeStyle = `hsla(${
-                Math.floor((360 * gameMs) / 1000) % 360
-              }, 100%, 50%, 0.6)`
-              ctx.lineWidth = 0.5
-              ctx.setLineDash([1, 1])
-              ctx.lineDashOffset = gameMs / 500
-
-              ctx.beginPath()
-              ctx.ellipse(
-                pegX + columnWidth / 2,
-                rowY,
-                (columnWidth - pegRadius * 3) / 2,
-                pegRadius / 2,
-                0,
-                Math.PI,
-                Math.PI * 2
-              )
-              ctx.stroke()
-
-              ctx.beginPath()
-              ctx.ellipse(
-                pegX + columnWidth / 2,
-                rowY,
-                prizeRadius,
-                prizeRadius,
-                0,
-                0,
-                Math.PI * 2
-              )
-              ctx.fill()
-
-              ctx.beginPath()
-              ctx.ellipse(
-                pegX + columnWidth / 2,
-                rowY,
-                (columnWidth - pegRadius * 3) / 2,
-                pegRadius / 2,
-                0,
-                0,
-                Math.PI
-              )
-              ctx.stroke()
             }
           }
         }
-
-        // Draw pegs
-        ctx.fillStyle = plinko.computedStyleMap().get("--peg-color")[0]
-        const evenRow = row % 2 == 0
-        ctx.beginPath()
-        ctx.ellipse(
-          (evenRow ? col : col + 0.5) * columnWidth + colOffset,
-          rowY,
-          pegRadius,
-          pegRadius,
-          0,
-          0,
-          Math.PI * 2
-        )
-        ctx.fill()
+      } else {
+        // Normal Row Rendering
+        for (let col = 0; col <= columns; col++) {
+          // Draw peg
+          ctx.fillStyle = plinko.computedStyleMap().get("--peg-color")[0]
+          const evenRow = row % 2 == 0
+          ctx.beginPath()
+          ctx.ellipse(
+            (evenRow ? col : col + 0.5) * columnWidth,
+            rowY,
+            pegRadius,
+            pegRadius,
+            0,
+            0,
+            Math.PI * 2
+          )
+          ctx.fill()
+        }
       }
     }
 
@@ -402,12 +408,13 @@ window.addEventListener("load", () => {
       }
 
       // Render frame with interpolated ball position
-      const t = Math.min(1, (totalPlayTime - gameState.ms) / frameStepMs)
+      const frameTime = Math.min(totalPlayTime, nextState.ms)
+      const t = (frameTime - gameState.ms) / frameStepMs
       const iBallPos = add(
         smul(gameState.ball.pos, 1 - t),
         smul(nextState.ball.pos, t)
       )
-      render(iBallPos, gameState.ball.rot, totalPlayTime)
+      render(iBallPos, gameState.ball.rot, frameTime)
     }
   }
 
