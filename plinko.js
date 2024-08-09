@@ -41,9 +41,84 @@ window.addEventListener("load", () => {
     nextPrizeRow: 0,
   }
   let futureGameState = null
-  let prizeSizes = [100000, 10000, 5000, 100, 10, 1, 0, 0]
-  let prizeRows = [[0, "^", "^", "^", "^", "^", "^"]]
+  let prizes = [
+    {
+      size: 10000,
+      count: 1,
+      userOdds: 0.00001,
+      userWon: 1,
+    },
+    {
+      size: 1000,
+      count: 10,
+      userOdds: 0.0001,
+      userWon: 0,
+    },
+    {
+      size: 500,
+      count: 20,
+      userOdds: 0.0002,
+      userWon: 0,
+    },
+    {
+      size: 10,
+      count: 256,
+      userOdds: 0.001,
+      userWon: 1,
+    },
+    {
+      size: 0.5,
+      count: 1024,
+      userOdds: 0.005,
+      userWon: 5,
+    },
+  ]
+  const maxPrizeSize = Math.max(...prizes.map((x) => x.size))
+
+  let prizeRows = []
   let prizeRowPathOffset = []
+
+  // Build Prize Rows
+  let lowestChanceWinOdds = 1
+  prizes.forEach((prize, i) => {
+    // Fill with prizes they won
+    for (let p = 0; p < prize.userWon; p++) {
+      const prizeRow = Array(columns).fill("^") // spikes
+      prizeRow[0] = i // prize
+      prizeRow[Math.floor(columns / 2)] = " " // gap
+      prizeRows.push(prizeRow)
+    }
+
+    // Then add prizes they could have won statistically
+    const notWon = prize.count - prize.userWon
+    if (notWon > 0) {
+      for (let n = 0; n < notWon; n++) {
+        if (Math.random() <= prize.userOdds) {
+          const prizeRow = Array(columns).fill("^") // spikes
+          prizeRow[0] = " " // gap
+          prizeRow[Math.floor(columns / 2)] = i // prize
+          prizeRows.push(prizeRow)
+        }
+      }
+    }
+
+    // Record lowest chance if they won
+    if (prize.userWon > 0 && prize.userOdds < lowestChanceWinOdds) {
+      lowestChanceWinOdds = prize.userOdds
+    }
+  })
+
+  // Add empty rows equal to the lowest chance prize that they won
+  const minRows = 1 + Math.log(1 / lowestChanceWinOdds) / Math.log(columns / 2) // 2 gaps every row defines the odds of passing the row
+  while (prizeRows.length < minRows) {
+    const prizeRow = Array(columns).fill("^") // spikes
+    prizeRow[0] = " " // gap
+    prizeRow[Math.floor(columns / 2)] = " " // gap
+    prizeRows.push(prizeRow)
+  }
+
+  // Shuffle Prize Rows
+  // prizeRows
 
   // Create 2D context
   const ctx = canvas.getContext("2d")
@@ -105,14 +180,16 @@ window.addEventListener("load", () => {
                 ctx.fill()
               } else if (Number.isInteger(prizeRow[prizeIndex])) {
                 // Draw Prize
-                const tier = prizeRow[prizeIndex]
+                const prize = prizes[prizeRow[prizeIndex]]
+                const prizeLogScale =
+                  1 - Math.log(prize.size + 1) / Math.log(maxPrizeSize + 1)
                 const prizeRadius =
-                  pegRadius +
-                  ((ballRadius - pegRadius) * (prizeSizes.length - tier)) /
-                    prizeSizes.length
+                  pegRadius + (ballRadius - pegRadius) * prizeLogScale
                 ctx.fillStyle = plinko
                   .computedStyleMap()
-                  .get(`--prize-${tier}-color`)[0]
+                  .get(
+                    `--prize-${Math.floor((1 - prizeLogScale) * 8)}-color`
+                  )[0]
                 ctx.strokeStyle = `hsla(${
                   Math.floor((360 * gameMs) / 1000) % 360
                 }, 100%, 50%, 0.6)`
