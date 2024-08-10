@@ -3,6 +3,9 @@ window.addEventListener("load", () => {
   const plinko = document.getElementById("plinko")
   const canvas = plinko.querySelector("canvas")
   const startButtons = [...plinko.querySelectorAll(".start-btn")]
+  const prizesWonSpan = plinko.querySelector(".prizes-won")
+  const prizesTotalSpan = plinko.querySelector(".prizes-total")
+  const prizeBubbleContainer = plinko.querySelector(".prize-bubble-container")
 
   // Assets
   const poolLogoSvg = document.createElement("img")
@@ -39,6 +42,8 @@ window.addEventListener("load", () => {
       acc: { x: 0, y: 100 },
     },
     nextPrizeRow: 0,
+    prizesWon: 0,
+    prizesTotal: 0,
   }
   let futureGameState = null
   let prizes = [
@@ -74,12 +79,15 @@ window.addEventListener("load", () => {
     },
   ]
   const maxPrizeSize = Math.max(...prizes.map((x) => x.size))
-
+  let endPrizeRowIndex = 0
   let prizeRows = []
   let prizeRowPathOffset = []
+  const defaultPrizeRow = Array(columns).fill("^") // spikes
+  defaultPrizeRow[0] = " " // gap
+  defaultPrizeRow[Math.floor(columns / 2)] = " " // gap
 
   // Build Prize Rows
-  let lowestChanceWinOdds = 1
+  let lowestWinOdds = 1
   prizes.forEach((prize, i) => {
     // Fill with prizes they won
     for (let p = 0; p < prize.userWon; p++) {
@@ -103,22 +111,45 @@ window.addEventListener("load", () => {
     }
 
     // Record lowest chance if they won
-    if (prize.userWon > 0 && prize.userOdds < lowestChanceWinOdds) {
-      lowestChanceWinOdds = prize.userOdds
+    if (prize.userWon > 0 && prize.userOdds < lowestWinOdds) {
+      lowestWinOdds = prize.userOdds
     }
   })
 
   // Add empty rows equal to the lowest chance prize that they won
-  const minRows = 1 + Math.log(1 / lowestChanceWinOdds) / Math.log(columns / 2) // 2 gaps every row defines the odds of passing the row
+  const minRows = 1 + Math.log(1 / lowestWinOdds) / Math.log(columns / 2) // 2 gaps every row defines the odds of passing the row
   while (prizeRows.length < minRows) {
-    const prizeRow = Array(columns).fill("^") // spikes
-    prizeRow[0] = " " // gap
-    prizeRow[Math.floor(columns / 2)] = " " // gap
-    prizeRows.push(prizeRow)
+    prizeRows.push(defaultPrizeRow)
   }
 
   // Shuffle Prize Rows
-  // prizeRows
+  for (let i = 0; i < prizeRows.length; i++) {
+    const randIndex = Math.floor(Math.random() * prizeRows.length)
+    const randRow = prizeRows[randIndex]
+    prizeRows[randIndex] = prizeRows[i]
+    prizeRows[i] = randRow
+  }
+
+  // Ensure the ball hits spikes after the last prize won
+  prizeRows.forEach((prizeRow, i) => {
+    if (Number.isInteger(prizeRow[0]) && i > endPrizeRowIndex) {
+      endPrizeRowIndex = i + 1
+    }
+  })
+  const offsetRowToRandomSpike = (row) => {
+    let randomOffset = Math.floor(Math.random() * row.length)
+    while (row[randomOffset] !== "^") {
+      randomOffset++
+    }
+    return [
+      ...row.slice(randomOffset % row.length, row.length),
+      ...row.slice(0, randomOffset % row.length),
+    ]
+  }
+  while (endPrizeRowIndex > prizeRows.length - 3) {
+    prizeRows.push(defaultPrizeRow)
+  }
+  prizeRows[endPrizeRowIndex] = offsetRowToRandomSpike(prizeRows[endPrizeRowIndex])
 
   // Create 2D context
   const ctx = canvas.getContext("2d")
@@ -135,11 +166,7 @@ window.addEventListener("load", () => {
 
     // render pegs
     const topPegRow = Math.max(0, Math.floor(gameYOffset / rowHeight))
-    for (
-      let row = topPegRow;
-      row <= topPegRow + Math.ceil(gameHeight / rowHeight);
-      row++
-    ) {
+    for (let row = topPegRow; row <= topPegRow + Math.ceil(gameHeight / rowHeight); row++) {
       const rowY = row * rowHeight - gameYOffset
 
       // Check if Prize Row
@@ -150,29 +177,20 @@ window.addEventListener("load", () => {
         if (prizeRow) {
           const prizeColDir = prizeRowIndex % 2 == 0 ? -1 : 1
           const prizeRowOffset =
-            ((prizeColDir * columnWidth * (prizeRowColPerSec * gameMs)) /
-              1000) %
-            gameWidth
+            ((prizeColDir * columnWidth * (prizeRowColPerSec * gameMs)) / 1000) % gameWidth
           for (let i = 0; i < columns * 2; i++) {
             const prizeIndex = (i + prizeRowPathOffset[prizeRowIndex]) % columns
-            const pegX =
-              i * columnWidth +
-              prizeRowOffset -
-              (prizeColDir > 0 ? gameWidth : 0) // start behind by 1 row if moving forward
+            const pegX = i * columnWidth + prizeRowOffset - (prizeColDir > 0 ? gameWidth : 0) // start behind by 1 row if moving forward
             if (pegX + columnWidth > 0 && pegX - columnWidth < gameWidth) {
               if (prizeRow[prizeIndex] === "^") {
                 // Draw spikes
-                ctx.fillStyle = plinko
-                  .computedStyleMap()
-                  .get("--spike-color")[0]
+                ctx.fillStyle = plinko.computedStyleMap().get("--spike-color")[0]
                 ctx.beginPath()
                 ctx.moveTo(pegX, rowY + pegRadius)
                 ctx.lineTo(pegX + pegRadius, rowY)
                 for (let s = 1; s <= spikesPerCol * 2; s++) {
                   ctx.lineTo(
-                    pegX +
-                      pegRadius +
-                      (s * (columnWidth - pegRadius * 2)) / (spikesPerCol * 2),
+                    pegX + pegRadius + (s * (columnWidth - pegRadius * 2)) / (spikesPerCol * 2),
                     s % 2 == 0 ? rowY : rowY - pegRadius
                   )
                 }
@@ -181,18 +199,12 @@ window.addEventListener("load", () => {
               } else if (Number.isInteger(prizeRow[prizeIndex])) {
                 // Draw Prize
                 const prize = prizes[prizeRow[prizeIndex]]
-                const prizeLogScale =
-                  1 - Math.log(prize.size + 1) / Math.log(maxPrizeSize + 1)
-                const prizeRadius =
-                  pegRadius + (ballRadius - pegRadius) * prizeLogScale
+                const prizeLogScale = 1 - Math.log(prize.size + 1) / Math.log(maxPrizeSize + 1)
+                const prizeRadius = pegRadius + (ballRadius - pegRadius) * (1 - prizeLogScale)
                 ctx.fillStyle = plinko
                   .computedStyleMap()
-                  .get(
-                    `--prize-${Math.floor((1 - prizeLogScale) * 8)}-color`
-                  )[0]
-                ctx.strokeStyle = `hsla(${
-                  Math.floor((360 * gameMs) / 1000) % 360
-                }, 100%, 50%, 0.6)`
+                  .get(`--prize-${Math.floor(prizeLogScale * 8)}-color`)[0]
+                ctx.strokeStyle = `hsla(${Math.floor((360 * gameMs) / 1000) % 360}, 100%, 50%, 0.6)`
                 ctx.lineWidth = 0.5
                 ctx.setLineDash([1, 1])
                 ctx.lineDashOffset = gameMs / 500
@@ -209,17 +221,19 @@ window.addEventListener("load", () => {
                 )
                 ctx.stroke()
 
-                ctx.beginPath()
-                ctx.ellipse(
-                  pegX + columnWidth / 2,
-                  rowY + prizeRadius / 2,
-                  prizeRadius,
-                  prizeRadius,
-                  0,
-                  0,
-                  Math.PI * 2
-                )
-                ctx.fill()
+                if (ballPos.y - gameYOffset < rowY || prizeIndex > 0) {
+                  ctx.beginPath()
+                  ctx.ellipse(
+                    pegX + columnWidth / 2,
+                    rowY + prizeRadius / 2,
+                    prizeRadius,
+                    prizeRadius,
+                    0,
+                    0,
+                    Math.PI * 2
+                  )
+                  ctx.fill()
+                }
 
                 ctx.beginPath()
                 ctx.ellipse(
@@ -266,15 +280,7 @@ window.addEventListener("load", () => {
     // render ball
     ctx.fillStyle = plinko.computedStyleMap().get("--ball-color")[0]
     ctx.beginPath()
-    ctx.ellipse(
-      ballPos.x,
-      ballPos.y - gameYOffset,
-      ballRadius,
-      ballRadius,
-      0,
-      0,
-      Math.PI * 2
-    )
+    ctx.ellipse(ballPos.x, ballPos.y - gameYOffset, ballRadius, ballRadius, 0, 0, Math.PI * 2)
     ctx.fill()
     ctx.save()
     ctx.translate(ballPos.x, ballPos.y - gameYOffset)
@@ -302,10 +308,7 @@ window.addEventListener("load", () => {
     scale = gameWidth / canvas.width
     gameHeight = scale * canvas.height
 
-    plinko.style.setProperty(
-      "--start-btn-size",
-      `${(0.8 * bb.width) / columns}px`
-    )
+    plinko.style.setProperty("--start-btn-size", `${(0.8 * bb.width) / columns}px`)
 
     // re-render frame
     render(gameState.ball.pos, gameState.ball.rot, totalPlayTime)
@@ -323,9 +326,7 @@ window.addEventListener("load", () => {
     n.ball.vel.y += (n.ball.acc.y * frameStepMs) / 1000
 
     // Cap speed
-    const speed = Math.sqrt(
-      n.ball.vel.x * n.ball.vel.x + n.ball.vel.y * n.ball.vel.y
-    )
+    const speed = Math.sqrt(n.ball.vel.x * n.ball.vel.x + n.ball.vel.y * n.ball.vel.y)
     if (speed > maxSpeed) {
       n.ball.vel.x = (maxSpeed * n.ball.vel.x) / speed
       n.ball.vel.y = (maxSpeed * n.ball.vel.y) / speed
@@ -368,8 +369,7 @@ window.addEventListener("load", () => {
 
         // set col offset
         pegVelocity = {
-          x:
-            prizeRowColPerSec * columnWidth * (prizeRowIndex % 2 == 0 ? -1 : 1),
+          x: prizeRowColPerSec * columnWidth * (prizeRowIndex % 2 == 0 ? -1 : 1),
           y: 0,
         }
         colOffset = ((pegVelocity.x * n.ms) / 1000) % columnWidth
@@ -388,30 +388,21 @@ window.addEventListener("load", () => {
         if (angleOfHit < Math.PI / 2) {
           const perpendicularVel = project(n.ball.vel, diff)
           const parallelVel = sub(n.ball.vel, perpendicularVel)
-          n.ball.vel = add(
-            parallelVel,
-            smul(perpendicularVel, -collisionElasticity)
-          )
+          n.ball.vel = add(parallelVel, smul(perpendicularVel, -collisionElasticity))
 
           // Check if peg transfers velocity to ball
           if (pegVelocity.x != 0) {
             const negDiff = neg(diff)
             const angleOfTransfer = angleBetween(pegVelocity, negDiff)
             if (angleOfTransfer < Math.PI / 2) {
-              n.ball.vel = add(
-                n.ball.vel,
-                smul(pegVelocity, Math.cos(angleOfTransfer))
-              )
+              n.ball.vel = add(n.ball.vel, smul(pegVelocity, Math.cos(angleOfTransfer)))
             }
           }
 
           // Spin ball based on collision
           n.ball.rotVel *= 0.5
           n.ball.rotVel +=
-            0.25 *
-            mag(parallelVel) *
-            (parallelVel.y > 0 ? -1 : 1) *
-            (n.ball.vel.x > 0 ? -1 : 1)
+            0.25 * mag(parallelVel) * (parallelVel.y > 0 ? -1 : 1) * (n.ball.vel.x > 0 ? -1 : 1)
         }
 
         // Push ball away
@@ -430,6 +421,15 @@ window.addEventListener("load", () => {
 
     // Check if ball has passed the next prize row
     if (n.ball.pos.y >= (n.nextPrizeRow + 1) * rowHeight * prizeRowFrequency) {
+      if (n.nextPrizeRow == endPrizeRowIndex) {
+        n.state = "done"
+      }
+      const prizeRow = prizeRows[n.nextPrizeRow]
+      if (prizeRow && Number.isInteger(prizeRow[0])) {
+        const prize = prizes[prizeRow[0]]
+        n.prizesWon++
+        n.prizesTotal += prize.size
+      }
       n.nextPrizeRow++
     }
 
@@ -438,7 +438,7 @@ window.addEventListener("load", () => {
 
   // Define game loop
   const play = () => {
-    if (gameState.state === "playing") {
+    if ((gameState.state === "playing") | (gameState.state === "done")) {
       // Request next frame
       requestAnimationFrame(play)
       const now = performance.now()
@@ -446,52 +446,55 @@ window.addEventListener("load", () => {
       totalPlayTime += timeSinceLastFrame
       lastFrameTime = now
 
-      // Get next game state
-      const nextState = getNextFrameState(gameState)
-      if (totalPlayTime >= nextState.ms) {
-        gameState = nextState
-      }
-
-      // Simulate future game states until out of frame
-      if (futureGameState === null) futureGameState = nextState
-      while (
-        futureGameState.ball.pos.y <
-        nextState.ball.pos.y + gameHeight * 1.5
-      ) {
-        const nextPrizeRow = futureGameState.nextPrizeRow
-        futureGameState = getNextFrameState(futureGameState)
-        if (futureGameState.nextPrizeRow > nextPrizeRow) {
-          // record prize offset
-          let goalPegX =
-            ((prizeRowColPerSec *
-              columnWidth *
-              (nextPrizeRow % 2 == 0 ? -1 : 1) *
-              futureGameState.ms) /
-              1000) %
-            gameWidth
-          if (goalPegX < 0) {
-            goalPegX += gameWidth
-          }
-          prizeRowPathOffset[nextPrizeRow] =
-            Math.floor((futureGameState.ball.pos.x - goalPegX) / columnWidth) %
-            columns
-          if (prizeRowPathOffset[nextPrizeRow] < 0) {
-            prizeRowPathOffset[nextPrizeRow] += columns
-          }
-          prizeRowPathOffset[nextPrizeRow] =
-            (columns - prizeRowPathOffset[nextPrizeRow]) % columns
-          prizeRows.push(prizeRows[0])
+      if (gameState.state === "playing") {
+        // Get next game state
+        const nextState = getNextFrameState(gameState)
+        if (totalPlayTime >= nextState.ms) {
+          gameState = nextState
         }
-      }
 
-      // Render frame with interpolated ball position
-      const frameTime = Math.min(totalPlayTime, nextState.ms)
-      const t = (frameTime - gameState.ms) / frameStepMs
-      const iBallPos = add(
-        smul(gameState.ball.pos, 1 - t),
-        smul(nextState.ball.pos, t)
-      )
-      render(iBallPos, gameState.ball.rot, frameTime)
+        // Update stats
+        prizesWonSpan.innerHTML = `${gameState.prizesWon}`
+        prizesTotalSpan.innerHTML = `$${gameState.prizesTotal.toFixed(2)}`
+
+        // Simulate future game states until out of frame
+        if (futureGameState === null) futureGameState = nextState
+        while (futureGameState.ball.pos.y < nextState.ball.pos.y + gameHeight * 1.5) {
+          const nextPrizeRow = futureGameState.nextPrizeRow
+          futureGameState = getNextFrameState(futureGameState)
+          if (futureGameState.nextPrizeRow > nextPrizeRow) {
+            // record prize offset
+            let goalPegX =
+              ((prizeRowColPerSec *
+                columnWidth *
+                (nextPrizeRow % 2 == 0 ? -1 : 1) *
+                futureGameState.ms) /
+                1000) %
+              gameWidth
+            if (goalPegX < 0) {
+              goalPegX += gameWidth
+            }
+            prizeRowPathOffset[nextPrizeRow] =
+              Math.floor((futureGameState.ball.pos.x - goalPegX) / columnWidth) % columns
+            if (prizeRowPathOffset[nextPrizeRow] < 0) {
+              prizeRowPathOffset[nextPrizeRow] += columns
+            }
+            prizeRowPathOffset[nextPrizeRow] =
+              (columns - prizeRowPathOffset[nextPrizeRow]) % columns
+          }
+        }
+
+        // Render frame with interpolated ball position
+        const frameTime = Math.min(totalPlayTime, nextState.ms)
+        const t = (frameTime - gameState.ms) / frameStepMs
+        const iBallPos = add(smul(gameState.ball.pos, 1 - t), smul(nextState.ball.pos, t))
+        render(iBallPos, gameState.ball.rot, frameTime)
+      } else {
+        // Render with ball out of frame
+        render({ x: -gameWidth, y: gameState.ball.pos.y }, 0, totalPlayTime)
+        plinko.classList.remove("playing")
+        plinko.classList.add("done")
+      }
     }
   }
 
@@ -501,9 +504,9 @@ window.addEventListener("load", () => {
     startButton.addEventListener("click", () => {
       gameState.state = "playing"
       lastFrameTime = performance.now()
+      plinko.classList.remove("ready")
       plinko.classList.add("playing")
-      gameState.ball.pos.x =
-        (gameWidth * (position + 0.4 + 0.2 * Math.random())) / columns
+      gameState.ball.pos.x = (gameWidth * (position + 0.4 + 0.2 * Math.random())) / columns
       play()
     })
   }

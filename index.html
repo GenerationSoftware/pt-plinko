@@ -3,28 +3,39 @@
 <html lang="en">
   <head>
     <title>PoolTogether Plinko</title>
-    <link rel="stylesheet" href="./style.css">
+    <link rel="stylesheet" href="./style.css" />
     <script src="./plinko.js"></script>
   </head>
   <body>
-    <div id="plinko">
+    <div id="plinko" class="ready">
       <canvas>
-        Your browser does not support the Canvas element. Please try a different browser to play PoolTogether Plinko.
+        Your browser does not support the Canvas element. Please try a different browser to play
+        PoolTogether Plinko.
       </canvas>
+      <div class="prize-bubble-container"></div>
       <div class="ui">
         <div class="start-btn-container">
-          <button class="start-btn" data-position="0">|<br/>V</button>
-          <button class="start-btn" data-position="1">|<br/>V</button>
-          <button class="start-btn" data-position="2">|<br/>V</button>
-          <button class="start-btn" data-position="3">|<br/>V</button>
-          <button class="start-btn" data-position="4">|<br/>V</button>
-          <button class="start-btn" data-position="5">|<br/>V</button>
-          <button class="start-btn" data-position="6">|<br/>V</button>
+          <button class="start-btn" data-position="0">|<br />V</button>
+          <button class="start-btn" data-position="1">|<br />V</button>
+          <button class="start-btn" data-position="2">|<br />V</button>
+          <button class="start-btn" data-position="3">|<br />V</button>
+          <button class="start-btn" data-position="4">|<br />V</button>
+          <button class="start-btn" data-position="5">|<br />V</button>
+          <button class="start-btn" data-position="6">|<br />V</button>
+        </div>
+        <div class="prize-info-container">
+          <h3>Drop a ball to reveal your prizes!</h3>
+          <p>Prize info here...</p>
+        </div>
+        <div class="prize-results-container hidden">
+          <div>Prizes Won: <span class="prizes-won">0</span></div>
+          <div>Prize Total: <span class="prizes-total">$0</span></div>
         </div>
       </div>
     </div>
     <noscript>
-      This app requires JavaScript to run. Please enable JavaScript in your browser to play PoolTogether Plinko.
+      This app requires JavaScript to run. Please enable JavaScript in your browser to play
+      PoolTogether Plinko.
     </noscript>
   </body>
 </html>
