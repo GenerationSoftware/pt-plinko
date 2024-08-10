@@ -125,3 +125,14 @@ body {
 #plinko.ready > .ui .prize-info-container {
   bottom: 0;
 }
+
+#plinko > .prize-bubble-container > .prize-bubble {
+  position: absolute;
+  padding: 1rem 2rem;
+  font-weight: bold;
+  transform: translate(-50%, -150%);
+  pointer-events: none;
+  border-radius: 1rem;
+  color: var(--background-color);
+  text-shadow: 1px 1px 0 var(--text-color);
+}

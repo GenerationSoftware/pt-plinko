@@ -154,11 +154,22 @@ window.addEventListener("load", () => {
   // Create 2D context
   const ctx = canvas.getContext("2d")
 
+  // Define game Y offset function
+  const calculateGameYOffset = (ballPos) => {
+    let gameYOffset = -rowHeight - marginTop - ballRadius
+    if (ballPos.y >= rowHeight * 2) gameYOffset += ballPos.y - rowHeight * 2
+    return gameYOffset
+  }
+
+  // Define prize scale function
+  const calculatePrizeLogScale = (prizeSize) => {
+    return Math.log(prizeSize + 1) / Math.log(maxPrizeSize + 1)
+  }
+
   // Define render call
   const render = (ballPos, ballRotation, gameMs) => {
     // Set camera position
-    let gameYOffset = -rowHeight - marginTop - ballRadius
-    if (ballPos.y >= rowHeight * 2) gameYOffset += ballPos.y - rowHeight * 2
+    const gameYOffset = calculateGameYOffset(ballPos)
 
     // clear and scale
     ctx.clearRect(0, 0, canvas.width, canvas.height)
@@ -199,11 +210,11 @@ window.addEventListener("load", () => {
               } else if (Number.isInteger(prizeRow[prizeIndex])) {
                 // Draw Prize
                 const prize = prizes[prizeRow[prizeIndex]]
-                const prizeLogScale = 1 - Math.log(prize.size + 1) / Math.log(maxPrizeSize + 1)
-                const prizeRadius = pegRadius + (ballRadius - pegRadius) * (1 - prizeLogScale)
+                const prizeLogScale = calculatePrizeLogScale(prize.size)
+                const prizeRadius = pegRadius + (ballRadius - pegRadius) * prizeLogScale
                 ctx.fillStyle = plinko
                   .computedStyleMap()
-                  .get(`--prize-${Math.floor(prizeLogScale * 8)}-color`)[0]
+                  .get(`--prize-${Math.floor((1 - prizeLogScale) * 8)}-color`)[0]
                 ctx.strokeStyle = `hsla(${Math.floor((360 * gameMs) / 1000) % 360}, 100%, 50%, 0.6)`
                 ctx.lineWidth = 0.5
                 ctx.setLineDash([1, 1])
@@ -297,6 +308,40 @@ window.addEventListener("load", () => {
 
     // Reset current transformation matrix to the identity matrix
     ctx.setTransform(1, 0, 0, 1, 0, 0)
+  }
+
+  // Define prize bubble placement
+  const placePrizeBubbles = (prizeRowIndex, ballPos, gameMs) => {
+    const prizeRow = prizeRows[prizeRowIndex]
+    if (prizeRow) {
+      const prizeColDir = prizeRowIndex % 2 == 0 ? -1 : 1
+      for (let i = 0; i < prizeRow.length; i++) {
+        const prizeIndex = prizeRow[i]
+        if (Number.isInteger(prizeIndex)) {
+          const prize = prizes[prizeIndex]
+          let prizeX =
+            (i +
+              0.5 -
+              prizeRowPathOffset[prizeRowIndex] +
+              (prizeColDir * prizeRowColPerSec * gameMs) / 1000) *
+            columnWidth
+          prizeX = ((prizeX % gameWidth) + gameWidth) % gameWidth
+          const prizeScale = calculatePrizeLogScale(prize.size)
+          const prizeBubble = document.createElement("div")
+          prizeBubble.classList.add("prize-bubble")
+          const rowY =
+            (prizeRowIndex + 1) * prizeRowFrequency * rowHeight - calculateGameYOffset(ballPos)
+          prizeBubble.style.top = `${Math.min(100, (100 * rowY) / gameHeight)}%`
+          prizeBubble.style.left = `${(100 * prizeX) / gameWidth}%`
+          prizeBubble.innerHTML = `$${prize.size}`
+          prizeBubble.style.backgroundColor = plinko
+            .computedStyleMap()
+            .get(`--prize-${Math.floor((1 - prizeScale) * 8)}-color`)[0]
+          // prizeBubble.style.opacity = 0.8
+          prizeBubbleContainer.append(prizeBubble)
+        }
+      }
+    }
   }
 
   // Listen for resize events
@@ -489,6 +534,18 @@ window.addEventListener("load", () => {
         const t = (frameTime - gameState.ms) / frameStepMs
         const iBallPos = add(smul(gameState.ball.pos, 1 - t), smul(nextState.ball.pos, t))
         render(iBallPos, gameState.ball.rot, frameTime)
+
+        // Place prize bubbles
+        prizeBubbleContainer.innerHTML = ""
+        for (
+          let prizeRowIndex = gameState.nextPrizeRow;
+          prizeRowIndex < gameState.nextPrizeRow + 2;
+          prizeRowIndex++
+        ) {
+          if (prizeRowIndex >= 0) {
+            placePrizeBubbles(prizeRowIndex, iBallPos, frameTime)
+          }
+        }
       } else {
         // Render with ball out of frame
         render({ x: -gameWidth, y: gameState.ball.pos.y }, 0, totalPlayTime)
