@@ -1,4 +1,4 @@
-window.addEventListener("load", () => {
+window.addEventListener("load", async () => {
   // Get elements
   const plinko = document.getElementById("plinko")
   const canvas = plinko.querySelector("canvas")
@@ -6,6 +6,55 @@ window.addEventListener("load", () => {
   const prizesWonSpan = plinko.querySelector(".prizes-won")
   const prizesTotalSpan = plinko.querySelector(".prizes-total")
   const prizeBubbleContainer = plinko.querySelector(".prize-bubble-container")
+
+  // Get URL search params
+  let prizes
+  try {
+    const searchParams = new URLSearchParams(window.location.search)
+    const prizeDataUri = searchParams.get("prizeDataUri")
+    if (prizeDataUri) {
+      prizes = await (await fetch(prizeDataUri)).json()
+    } else {
+      throw new Error("prize data URI missing...")
+    }
+  } catch (err) {
+    console.error(err)
+
+    // Default example data
+    plinko.classList.add("default")
+    prizes = [
+      {
+        size: 10000,
+        count: 1,
+        userOdds: 0.00001,
+        userWon: 1,
+      },
+      {
+        size: 1000,
+        count: 10,
+        userOdds: 0.0001,
+        userWon: 0,
+      },
+      {
+        size: 500,
+        count: 20,
+        userOdds: 0.0002,
+        userWon: 0,
+      },
+      {
+        size: 10,
+        count: 256,
+        userOdds: 0.001,
+        userWon: 1,
+      },
+      {
+        size: 0.5,
+        count: 1024,
+        userOdds: 0.005,
+        userWon: 5,
+      },
+    ]
+  }
 
   // Assets
   const poolLogoSvg = document.createElement("img")
@@ -46,38 +95,8 @@ window.addEventListener("load", () => {
     prizesTotal: 0,
   }
   let futureGameState = null
-  let prizes = [
-    {
-      size: 10000,
-      count: 1,
-      userOdds: 0.00001,
-      userWon: 1,
-    },
-    {
-      size: 1000,
-      count: 10,
-      userOdds: 0.0001,
-      userWon: 0,
-    },
-    {
-      size: 500,
-      count: 20,
-      userOdds: 0.0002,
-      userWon: 0,
-    },
-    {
-      size: 10,
-      count: 256,
-      userOdds: 0.001,
-      userWon: 1,
-    },
-    {
-      size: 0.5,
-      count: 1024,
-      userOdds: 0.005,
-      userWon: 5,
-    },
-  ]
+
+  // Prize Info
   const maxPrizeSize = Math.max(...prizes.map((x) => x.size))
   let endPrizeRowIndex = 0
   let prizeRows = []
@@ -132,7 +151,7 @@ window.addEventListener("load", () => {
 
   // Ensure the ball hits spikes after the last prize won
   prizeRows.forEach((prizeRow, i) => {
-    if (Number.isInteger(prizeRow[0]) && i > endPrizeRowIndex) {
+    if (Number.isInteger(prizeRow[0]) && i >= endPrizeRowIndex) {
       endPrizeRowIndex = i + 1
     }
   })
@@ -327,18 +346,24 @@ window.addEventListener("load", () => {
             columnWidth
           prizeX = ((prizeX % gameWidth) + gameWidth) % gameWidth
           const prizeScale = calculatePrizeLogScale(prize.size)
-          const prizeBubble = document.createElement("div")
-          prizeBubble.classList.add("prize-bubble")
           const rowY =
             (prizeRowIndex + 1) * prizeRowFrequency * rowHeight - calculateGameYOffset(ballPos)
-          prizeBubble.style.top = `${Math.min(100, (100 * rowY) / gameHeight)}%`
-          prizeBubble.style.left = `${(100 * prizeX) / gameWidth}%`
-          prizeBubble.innerHTML = `$${prize.size}`
-          prizeBubble.style.backgroundColor = plinko
-            .computedStyleMap()
-            .get(`--prize-${Math.floor((1 - prizeScale) * 8)}-color`)[0]
-          // prizeBubble.style.opacity = 0.8
-          prizeBubbleContainer.append(prizeBubble)
+          const createBubble = (leftOffset) => {
+            const prizeBubble = document.createElement("div")
+            prizeBubble.classList.add("prize-bubble")
+            prizeBubble.style.top = `${Math.min(100, (100 * rowY) / gameHeight)}%`
+            prizeBubble.style.left = `${(100 * prizeX) / gameWidth + leftOffset}%`
+            prizeBubble.innerHTML = `$${
+              Number.isInteger(prize.size) ? prize.size : prize.size.toFixed(2)
+            }`
+            prizeBubble.style.backgroundColor = plinko
+              .computedStyleMap()
+              .get(`--prize-${Math.floor((1 - prizeScale) * 8)}-color`)[0]
+            return prizeBubble
+          }
+          prizeBubbleContainer.append(createBubble(0))
+          prizeBubbleContainer.append(createBubble(-100))
+          prizeBubbleContainer.append(createBubble(100))
         }
       }
     }

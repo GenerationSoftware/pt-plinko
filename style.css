@@ -24,9 +24,10 @@ body {
 
 #plinko {
   /* Game Style (can be overridden through query params) */
-  --background-color: white;
-  --text-color: black;
-  --ball-color: #57006d;
+  --background-color: rgb(48, 48, 48);
+  --text-color: white;
+  /* --ball-color: #57006d; */
+  --ball-color: #b220d6;
   --spike-color: #646464;
   --peg-color: #9b9b9b;
   --prize-0-color: #ff0000;
@@ -50,6 +51,7 @@ body {
   max-width: 100vmin;
   overflow: hidden;
   background-color: var(--background-color);
+  color: var(--text-color);
 }
 
 #plinko > .ui,
@@ -128,11 +130,36 @@ body {
 
 #plinko > .prize-bubble-container > .prize-bubble {
   position: absolute;
-  padding: 1rem 2rem;
+  padding: 1rem 1rem;
   font-weight: bold;
+  font-size: large;
   transform: translate(-50%, -150%);
   pointer-events: none;
   border-radius: 1rem;
-  color: var(--background-color);
-  text-shadow: 1px 1px 0 var(--text-color);
+  color: var(--text-color);
+  text-shadow: 1px 1px 0 var(--background-color);
+  opacity: 0.9;
+}
+
+#plinko > .prize-bubble-container > .prize-bubble::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 0.2rem;
+  transform: translate(-50%, -50%) rotate(45deg);
+  background-color: inherit;
+}
+
+#plinko > .example-banner {
+  display: none;
+}
+
+#plinko.example > .example-banner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: absolute;
 }
