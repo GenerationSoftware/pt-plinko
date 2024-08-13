@@ -71,6 +71,10 @@ body {
   color: var(--text-color);
 }
 
+#plinko > .ui .start-btn:hover {
+  border-style: solid;
+}
+
 #plinko > .ui .start-btn-container {
   display: flex;
   position: absolute;
